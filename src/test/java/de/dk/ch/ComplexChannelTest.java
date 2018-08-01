@@ -3,6 +3,8 @@ package de.dk.ch;
 import static de.dk.ch.TestObject.DEFAULT_MSG;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.function.Supplier;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,15 +29,28 @@ public class ComplexChannelTest {
       IDGenerator idGen = new SimpleIterativeIdGenerator();
       TestChannelHandler<String> stringChannelHandlerA = new TestChannelHandler<>(String.class);
       TestChannelHandler<TestObject> messageChannelHandlerA = new TestChannelHandler<>(TestObject.class);
-      this.multiplexerA = new Multiplexer(idGen, m -> multiplexerB.receive(m), stringChannelHandlerA, messageChannelHandlerA);
+      this.multiplexerA = new Multiplexer(idGen, createMediumInFrontOf(() -> multiplexerB), stringChannelHandlerA, messageChannelHandlerA);
 
       TestChannelHandler<String> stringChannelHandlerB = new TestChannelHandler<>(String.class);
       TestChannelHandler<TestObject> messageChannelHandlerB = new TestChannelHandler<>(TestObject.class);
-      this.multiplexerB = new Multiplexer(idGen, m -> multiplexerA.receive(m), stringChannelHandlerB, messageChannelHandlerB);
+      this.multiplexerB = new Multiplexer(idGen, createMediumInFrontOf(() -> multiplexerA), stringChannelHandlerB, messageChannelHandlerB);
 
       this.pair0 = new ChannelPair<>(String.class, multiplexerA, stringChannelHandlerA, stringChannelHandlerB);
       this.pair1 = new ChannelPair<>(String.class, multiplexerA, stringChannelHandlerA, stringChannelHandlerB);
       this.pair2 = new ChannelPair<>(TestObject.class, multiplexerA, messageChannelHandlerA, messageChannelHandlerB);
+   }
+
+   protected <T> ChannelPair<T> createChannelPair(Class<T> msgType,
+                                                  Multiplexer multiplexer,
+                                                  TestChannelHandler<T> handlerA,
+                                                  TestChannelHandler<T> handlerB) {
+
+      return new ChannelPair<>(msgType, multiplexer, handlerA, handlerB);
+   }
+
+   protected Sender createMediumInFrontOf(Supplier<Multiplexer> target) {
+      return msg -> target.get()
+                          .receive(msg);
    }
 
    @Test
@@ -53,7 +68,7 @@ public class ComplexChannelTest {
    }
 
    @Test
-   public void closingAChannelDoesNotAffectOtherChannels() {
+   public void closingAChannelPairDoesNotAffectOtherChannelPairs() {
       pair0.closeA();
       pair1.msgAToB(DEFAULT_MSG);
       pair2.msgBToA(TestObject.defaultMessage());

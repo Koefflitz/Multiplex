@@ -69,7 +69,7 @@ public class SimpleChannelTest {
       channelB.addListener((listenerB = new TestChannelListener<>()));
    }
 
-   private static <T> void testMessageSending(Channel<T> sender, TestChannelListener<T> receiver, T msg) {
+   private static <T> void messageGoesThrough(Channel<T> sender, TestChannelListener<T> receiver, T msg) {
       try {
          sender.send(msg);
       } catch (IOException e) {
@@ -88,16 +88,16 @@ public class SimpleChannelTest {
    @Test
    public void singleMessageGoesThrough() {
       channelEstablishes();
-      testMessageSending(channelA, listenerB, DEFAULT_MSG);
+      messageGoesThrough(channelA, listenerB, DEFAULT_MSG);
    }
 
    @Test
-   public void multipleMessagesGoThroughBothSides() {
+   public void multipleMessagesGoThroughBothDirections() {
       channelEstablishes();
-      testMessageSending(channelA, listenerB, DEFAULT_MSG);
-      testMessageSending(channelA, listenerB, DEFAULT_MSG);
-      testMessageSending(channelB, listenerA, DEFAULT_MSG);
-      testMessageSending(channelB, listenerA, DEFAULT_MSG);
+      messageGoesThrough(channelA, listenerB, DEFAULT_MSG);
+      messageGoesThrough(channelA, listenerB, DEFAULT_MSG);
+      messageGoesThrough(channelB, listenerA, DEFAULT_MSG);
+      messageGoesThrough(channelB, listenerA, DEFAULT_MSG);
    }
 
    @Test

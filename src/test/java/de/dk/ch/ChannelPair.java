@@ -22,7 +22,11 @@ public class ChannelPair<T> {
    private final TestChannelListener<T> listenerA;
    private final TestChannelListener<T> listenerB;
 
-   public ChannelPair(Class<T> msgType, Multiplexer multiplexer, TestChannelHandler<T> handlerA, TestChannelHandler<T> handlerB) {
+   public ChannelPair(Class<T> msgType,
+                      Multiplexer multiplexer,
+                      TestChannelHandler<T> handlerA,
+                      TestChannelHandler<T> handlerB) {
+
       this.handlerA = handlerA;
       this.handlerB = handlerB;
       try {
@@ -39,6 +43,16 @@ public class ChannelPair<T> {
       channelB.addListener(this.listenerB = new TestChannelListener<>());
    }
 
+   private static <T> void close(Channel<T> trigger, Channel<T> reactor) {
+      try {
+         trigger.close();
+      } catch (IOException e) {
+         fail("Failed to close channel.", e);
+      }
+
+      assertTrue(reactor.isClosed(), "After closing a channel, the corresponding channel was not closed.");
+   }
+
    public void msgAToB(T msg) {
       sendMessage(msg, channelA, listenerB);
    }
@@ -47,7 +61,7 @@ public class ChannelPair<T> {
       sendMessage(msg, channelB, listenerA);
    }
 
-   private void sendMessage(T msg, Channel<T> sender, TestChannelListener<T> receiver) {
+   protected void sendMessage(T msg, Channel<T> sender, TestChannelListener<T> receiver) {
       try {
          sender.send(msg);
       } catch (IOException e) {
@@ -70,16 +84,6 @@ public class ChannelPair<T> {
 
    public void closeB() {
       close(channelB, channelA);
-   }
-
-   private void close(Channel<T> trigger, Channel<T> reactor) {
-      try {
-         trigger.close();
-      } catch (IOException e) {
-         fail("Failed to close channel.", e);
-      }
-
-      assertTrue(reactor.isClosed(), "After closing a channel, the corresponding channel was not closed.");
    }
 
    public Channel<T> getChannelA() {
