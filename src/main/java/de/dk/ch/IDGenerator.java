@@ -17,5 +17,5 @@ public interface IDGenerator {
     *
     * @throws NoSuchElementException If no more id can be generated
     */
-   public long nextId() throws NoSuchElementException;
+   public byte nextId() throws NoSuchElementException;
 }

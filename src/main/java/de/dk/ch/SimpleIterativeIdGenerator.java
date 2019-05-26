@@ -11,7 +11,7 @@ import java.util.NoSuchElementException;
  */
 public class SimpleIterativeIdGenerator implements IDGenerator {
    private final boolean incrementing;
-   private long idCounter;
+   private byte idCounter;
 
    /**
     * Creates a new simple id generator that generates ids from <code>Long.MIN_VALUE</code>
@@ -31,12 +31,12 @@ public class SimpleIterativeIdGenerator implements IDGenerator {
     */
    public SimpleIterativeIdGenerator(boolean incrementing) {
       this.incrementing = incrementing;
-      this.idCounter = incrementing ? Long.MIN_VALUE : Long.MAX_VALUE;
+      this.idCounter = incrementing ? Byte.MIN_VALUE : Byte.MAX_VALUE;
    }
 
    @Override
-   public long nextId() throws NoSuchElementException {
-      if (idCounter == (incrementing ? Long.MAX_VALUE : Long.MIN_VALUE))
+   public byte nextId() throws NoSuchElementException {
+      if (idCounter == (incrementing ? Byte.MAX_VALUE : Byte.MIN_VALUE))
          throw new NoSuchElementException();
 
       return incrementing ? idCounter++ : idCounter--;

@@ -5,15 +5,12 @@ import static de.dk.ch.ChannelState.OPEN;
 import static de.dk.ch.ChannelState.OPENING;
 
 import java.io.IOException;
-import java.util.LinkedList;
+import java.io.OutputStream;
 import java.util.Objects;
-import java.util.Queue;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import de.dk.ch.de.dk.ch.ex.ClosedException;
 
 import de.dk.ch.ChannelListener.ChannelListenerChain;
-import de.dk.ch.ChannelPacket.ChannelPacketType;
 
 /**
  * A channel through which messages can be send and received.
@@ -23,14 +20,11 @@ import de.dk.ch.ChannelPacket.ChannelPacketType;
  *
  * @see Multiplexer
  */
-public class Channel<T> {
-   private static final Logger log = LoggerFactory.getLogger(Channel.class);
-
-   private final long id;
-   private final ChannelListenerChain<T> listeners = new ChannelListenerChain<>();
-   private final Sender sender;
+public class Channel {
+   private final byte id;
+   private final ChannelListenerChain listeners = new ChannelListenerChain();
    private final Multiplexer multiplexer;
-   private Queue<T> preSentMessages = new LinkedList<>();
+   private ChannelOutputstream outputstream;
 
    private ChannelState state = OPENING;
 
@@ -39,62 +33,31 @@ public class Channel<T> {
     * It is recommended to use a multiplexer to create new channels.
     *
     * @param id The id of this channel (should be unique)
-    * @param sender The sender via which messages are sent (cannot be <code>null</code>)
     * @param multiplexer The multiplexer that manages this channel
     *
     * @throws NullPointerException If the given <code>sender</code> is <code>null</code>
     */
-   public Channel(long id, Sender sender, Multiplexer multiplexer) throws NullPointerException {
+   Channel(byte id, Multiplexer multiplexer) throws NullPointerException {
       this.id = id;
-      this.sender = Objects.requireNonNull(sender);
       this.multiplexer = multiplexer;
+      this.outputstream = new ChannelOutputstream(multiplexer, this);
    }
 
    /**
     * This method is usually called by the multiplexer when a packet with this channelId arrived.
     * This method can manually be called to fake an arrival of a packet for this channel.
     *
-    * @param packet The arrived packet
+    * @param data The arrived data
     *
     * @throws IllegalArgumentException If the packet has not the same <code>channelId</code> as this channel
     * @throws ClosedException If this channel has already been closed
     */
-   @SuppressWarnings("unchecked")
-   public synchronized void receive(PayloadPacket packet) throws IllegalArgumentException,
-                                                                 ClosedException {
-      if (packet.channelId != this.id)
-         throw new IllegalArgumentException("Packet ID does not match this channel id");
-
+   public synchronized void receive(byte[] data) throws IllegalArgumentException,
+                                                        ClosedException {
       ensureNotClosed();
       synchronized (listeners) {
-         listeners.received((T) packet.getPayload());
+         listeners.received(data);
       }
-   }
-
-   /**
-    * Sends an object via the sender through this channel.
-    * Objects can only be sent if this channels state is <code>OPEN</code>.
-    * If the channel is in <code>OPENING</code> state the messages will be queued until it is opened.
-    * Queued messages will be sent when the channel has been opened.
-    * If the channel never opens, e.g. the request gets declined, the queued messages will never be delivered.
-    * Therefore it is recommended to send messages in <code>OPEN</code> state.
-    *
-    * @param object The object to be sent
-    *
-    * @throws ClosedException If this channel has already been closed
-    * @throws IOException If an I/O error occurs while sending the object
-    */
-   public synchronized void send(T object) throws ClosedException, IOException {
-      ensureNotClosed();
-      if (state == OPEN)
-         sender.send(new PayloadPacket(id, object));
-      else if (state == OPENING)
-         preSentMessages.offer(object);
-   }
-
-   protected synchronized void send(ChannelPacket packet) throws IOException, ClosedException {
-      ensureNotClosed();
-      sender.send(packet);
    }
 
    /**
@@ -105,23 +68,13 @@ public class Channel<T> {
     * @throws InterruptedException If the calling thread is interrupted while waiting
     */
    public synchronized void waitToOpen(long timeout) throws InterruptedException {
-      wait(timeout);
+      if (state != OPEN)
+         wait(timeout);
    }
 
-   private void ensureNotClosed() throws ClosedException {
+   void ensureNotClosed() throws ClosedException {
       if (isClosed())
          throw new ClosedException("This channel has already been closed.");
-   }
-
-   private void sendQueuedMessages() {
-      try {
-         while (!preSentMessages.isEmpty())
-            send(preSentMessages.poll());
-
-      } catch (IllegalArgumentException | IOException e) {
-         log.warn("Could not send prequeued messages");
-      }
-      preSentMessages = null;
    }
 
    /**
@@ -130,7 +83,7 @@ public class Channel<T> {
     *
     * @param listener The listener to be added to this channel
     */
-   public void addListener(ChannelListener<T> listener) {
+   public void addListener(ChannelListener listener) {
       synchronized (listeners) {
          listeners.add(listener);
       }
@@ -141,7 +94,7 @@ public class Channel<T> {
     *
     * @param listener The listener to be removed
     */
-   public void removeListener(ChannelListener<T> listener) {
+   public void removeListener(ChannelListener listener) {
       synchronized (listeners) {
          listeners.remove(listener);
       }
@@ -158,9 +111,10 @@ public class Channel<T> {
          return;
 
       try {
-         send(new ChannelPacket(id, ChannelPacketType.CLOSE));
+         multiplexer.send(id, MessageType.CLOSE);
       } finally {
          state = CLOSED;
+         outputstream = null;
 
          if (multiplexer != null)
             multiplexer.channelClosed(this);
@@ -176,12 +130,22 @@ public class Channel<T> {
 
       this.state = state;
       if (state == OPEN) {
-         sendQueuedMessages();
+         try {
+            outputstream.sendQueuedMessages();
+         } catch (IOException e) {
+            // Can't handle, can't
+            e.printStackTrace();
+         }
          notifyAll();
       }
    }
 
-   public Iterable<ChannelListener<T>> getListeners() {
+   public synchronized OutputStream getOutputstream() throws ClosedException {
+      ensureNotClosed();
+      return outputstream;
+   }
+
+   public Iterable<ChannelListener> getListeners() {
       return listeners;
    }
 
@@ -212,33 +176,23 @@ public class Channel<T> {
     *
     * @return The unique id of this channel
     */
-   public long getId() {
+   public byte getId() {
       return id;
    }
 
    @Override
-   public int hashCode() {
-      final int prime = 31;
-      int result = 1;
-      result = prime * result + (int) (this.id ^ (this.id >>> 32));
-      result = prime * result + ((this.state == null) ? 0 : this.state.hashCode());
-      return result;
+   public boolean equals(Object o) {
+      if (this == o)
+         return true;
+      if (o == null || getClass() != o.getClass())
+         return false;
+      Channel channel = (Channel) o;
+      return id == channel.id;
    }
 
    @Override
-   public boolean equals(Object obj) {
-      if (this == obj)
-         return true;
-      if (obj == null)
-         return false;
-      if (getClass() != obj.getClass())
-         return false;
-      Channel<?> other = (Channel<?>) obj;
-      if (this.id != other.id)
-         return false;
-      if (this.state != other.state)
-         return false;
-      return true;
+   public int hashCode() {
+      return Objects.hash(id);
    }
 
    @Override

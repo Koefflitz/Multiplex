@@ -1,4 +1,7 @@
-package de.dk.ch;
+package de.dk.ch.de.dk.ch.ex;
+
+import de.dk.ch.Channel;
+import de.dk.ch.Multiplexer;
 
 import java.io.IOException;
 

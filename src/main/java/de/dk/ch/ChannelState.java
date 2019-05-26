@@ -23,5 +23,5 @@ public enum ChannelState {
     * No messages can be sent or received.
     * A closed channel cannot be opened again.
     */
-   CLOSED;
+   CLOSED
 }

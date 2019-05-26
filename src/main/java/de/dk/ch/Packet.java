@@ -1,36 +1,28 @@
 package de.dk.ch;
 
 import java.io.Serializable;
+import java.util.Objects;
 
 public abstract class Packet implements Serializable {
    private static final long serialVersionUID = -6750454488616222885L;
 
-   public final long channelId;
+   public final byte channelId;
 
-   public Packet(long channelId) {
+   public Packet(byte channelId) {
       this.channelId = channelId;
    }
 
    @Override
-   public int hashCode() {
-      final int prime = 31;
-      int result = 1;
-      result = prime * result + (int) (this.channelId ^ (this.channelId >>> 32));
-      return result;
+   public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      Packet packet = (Packet) o;
+      return channelId == packet.channelId;
    }
 
    @Override
-   public boolean equals(Object obj) {
-      if (this == obj)
-         return true;
-      if (obj == null)
-         return false;
-      if (getClass() != obj.getClass())
-         return false;
-      Packet other = (Packet) obj;
-      if (this.channelId != other.channelId)
-         return false;
-      return true;
+   public int hashCode() {
+      return Objects.hash(channelId);
    }
 
    @Override

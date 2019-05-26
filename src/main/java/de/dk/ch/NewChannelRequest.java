@@ -4,28 +4,27 @@ import java.io.IOException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
 
-import de.dk.ch.ChannelPacket.ChannelPacketType;
+import de.dk.ch.de.dk.ch.ex.ChannelDeclinedException;
 
-class NewChannelRequest<P> implements Callable<Channel<P>> {
-   private final Channel<P> channel;
-   private final Class<P> type;
-   private final P initialMessage;
-   private ChannelRefusedPacket refuseResponse;
+class NewChannelRequest implements Callable<Channel> {
+   private Multiplexer multiplexer;
+   private final Channel channel;
+   private final byte[] initialMessage;
+   private String refuseResponse;
    private State state;
 
-   protected NewChannelRequest(Channel<P> channel, Class<P> type, P initialMsg) {
+   NewChannelRequest(Channel channel, byte[] initialMsg) {
       this.channel = channel;
-      this.type = type;
       this.initialMessage = initialMsg;
    }
 
-   protected NewChannelRequest(Channel<P> channel, Class<P> type) {
-      this(channel, type, null);
+   NewChannelRequest(Channel channel) {
+      this(channel, null);
    }
 
    @Override
-   public synchronized Channel<P> call() throws InterruptedException,
-                                                ChannelDeclinedException,
+   public synchronized Channel call() throws InterruptedException,
+           ChannelDeclinedException,
                                                 IOException {
       try {
          return request(0);
@@ -34,54 +33,54 @@ class NewChannelRequest<P> implements Callable<Channel<P>> {
       }
    }
 
-   public synchronized Channel<P> request(long timeout) throws InterruptedException,
-                                                               ChannelDeclinedException,
-                                                               IOException,
-                                                               TimeoutException {
+   synchronized Channel request(long timeout) throws InterruptedException,
+                                                            ChannelDeclinedException,
+                                                            IOException,
+                                                            TimeoutException {
       this.state = State.WAITING;
-      channel.send(new NewChannelRequestPacket(channel.getId(), type, initialMessage));
+      if (initialMessage != null)
+         multiplexer.send(channel.getId(), MessageType.NEW, initialMessage);
+      else
+         multiplexer.send(channel.getId(), MessageType.NEW);
+
       if (state == State.WAITING)
          wait(timeout);
 
       switch (state) {
       case ACCEPTED:
-         channel.send(new ChannelPacket(channel.getId(), ChannelPacketType.OK));
          channel.setState(ChannelState.OPEN);
          return channel;
       case REFUSED:
-         if (refuseResponse.getException() instanceof ChannelDeclinedException)
-            throw (ChannelDeclinedException) refuseResponse.getException();
+         if (refuseResponse != null)
+            throw new ChannelDeclinedException(refuseResponse);
          else
-            throw new IOException(refuseResponse.getException());
+            throw new ChannelDeclinedException();
       case WAITING:
          throw new TimeoutException("The channel request timed out.");
       }
 
-      return channel;
+      // Can technically never be reached, but to satisfy the compiler...
+      throw new Error("Somethings really wrong here! Missed a case?");
    }
 
-   public synchronized void refused(ChannelRefusedPacket response) {
-      this.refuseResponse = response;
+   synchronized void refused(String message) {
+      this.refuseResponse = message;
       this.state = State.REFUSED;
       notify();
    }
 
-   public synchronized void accepted() {
+   synchronized void accepted() {
       this.state = State.ACCEPTED;
       notify();
    }
 
-   protected Channel<?> getChannel() {
+   protected Channel getChannel() {
       return channel;
    }
 
-   protected Class<P> getType() {
-      return type;
-   }
-
-   private static enum State {
+   private enum State {
       WAITING,
       ACCEPTED,
-      REFUSED;
+      REFUSED
    }
 }

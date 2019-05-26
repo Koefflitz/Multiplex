@@ -9,24 +9,23 @@ import java.util.LinkedList;
  * @author David Koettlitz
  * <br>Erstellt am 14.07.2017
  */
-public interface ChannelListener<T> {
+public interface ChannelListener {
    /**
     * Handle the message that was received through the channel.
     *
-    * @param msg The received message
+    * @param data The received data
     */
-   public void received(T msg);
+   public void received(byte[] data);
 
-   public static class ChannelListenerChain<T> extends LinkedList<ChannelListener<T>>
-                                                       implements ChannelListener<T> {
+   public static class ChannelListenerChain extends LinkedList<ChannelListener>
+                                            implements ChannelListener {
       private static final long serialVersionUID = 1L;
 
       @Override
-      public void received(T packet) {
-         @SuppressWarnings("unchecked")
-         ChannelListener<T>[] listeners = toArray(new ChannelListener[size()]);
-         for (ChannelListener<T> l : listeners)
-            l.received(packet);
+      public void received(byte[] data) {
+         ChannelListener[] listeners = toArray(new ChannelListener[size()]);
+         for (ChannelListener l : listeners)
+            l.received(data);
       }
    }
 }
